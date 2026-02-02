@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2026 復興區公所尾牙數位平台</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root {
+            --primary: #2c3e50; --accent: #3498db; --red: #e74c3c; --bg: #f4f7f9; --white: #ffffff; --border: #e0e0e0; --gold: #f39c12;
+        }
+        body { font-family: -apple-system, "Segoe UI", "Microsoft JhengHei", sans-serif; background-color: var(--bg); margin: 0; padding: 0; color: #333; }
+        
+        /* 導覽列 */
+        .nav-main { background: var(--white); position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .nav-header { text-align: center; padding: 15px 10px; border-bottom: 1px solid var(--border); }
+        .nav-header h1 { margin: 0; font-size: 1.2rem; color: var(--primary); letter-spacing: 1px; }
+        .nav-tabs { display: flex; justify-content: space-around; }
+        .tab-btn { padding: 12px 5px; font-weight: 500; cursor: pointer; color: #7f8c8d; border-bottom: 3px solid transparent; flex: 1; text-align: center; font-size: 0.95rem; }
+        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: bold; }
+
+        /* 內容容器 */
+        .container { max-width: 850px; margin: auto; padding: 20px; min-height: 80vh; }
+        .page { display: none; animation: fadeIn 0.4s ease; }
+        .page.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* --- 手冊樣式 --- */
+        .manual-nav { display: flex; gap: 10px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 5px; }
+        .m-btn { background: #eee; padding: 8px 18px; border-radius: 20px; font-size: 0.85rem; cursor: pointer; border: none; white-space: nowrap; color: #666; }
+        .m-btn.active { background: var(--primary); color: white; }
+        .manual-content { display: none; }
+        .manual-content.active { display: block; }
+
+        .card { background: white; margin-bottom: 10px; border-radius: 10px; border-left: 5px solid var(--accent); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .program-card { display: flex; overflow: hidden; }
+        .time-box { background: #ebf5fb; color: var(--accent); padding: 15px; min-width: 65px; font-weight: bold; text-align: center; display: flex; align-items: center; justify-content: center; }
+        .event-box { padding: 15px; flex: 1; font-size: 1rem; }
+
+        /* --- 禮物清單樣式 --- */
+        .gift-table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .gift-table th, .gift-table td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; }
+        .gift-table th { background: var(--primary); color: white; font-weight: 500; }
+        .gift-tag { background: #fef9e7; color: var(--gold); padding: 3px 10px; border-radius: 5px; font-size: 0.8rem; font-weight: bold; border: 1px solid var(--gold); }
+        .prize-name { font-weight: bold; color: var(--primary); }
+
+        /* --- 抽獎看板樣式 --- */
+        .winner-card { display: inline-block; background: white; padding: 12px 25px; font-size: 1.4rem; font-weight: 500; color: var(--primary); border: 1px solid var(--border); border-radius: 8px; margin: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); animation: pop 0.5s ease; }
+        @keyframes pop { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+
+        /* 管理後台佈局 */
+        .admin-grid { display: grid; grid-template-columns: 1fr; gap: 30px; }
+        @media (min-width: 768px) { .admin-grid { grid-template-columns: 320px 1fr; } }
+        .sidebar { background: white; padding: 25px; border-radius: 15px; border: 1px solid var(--border); height: fit-content; }
+        .btn { padding: 12px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: 500; transition: 0.2s; }
+        .btn-blue { background: var(--accent); color: white; }
+        .btn-outline { background: white; border: 1px solid var(--border); color: #7f8c8d; }
+        input { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; box-sizing: border-box; margin-bottom: 12px; }
+
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center; }
+        .modal-content { background: white; width: 95%; max-width: 850px; padding: 35px; border-radius: 15px; position: relative; max-height: 90vh; overflow-y: auto; }
+        @media print { .no-print { display: none !important; } .modal { position: absolute !important; display: block !important; } }
+    </style>
+</head>
+<body>
+
+<nav class="nav-main no-print">
+    <div class="nav-header"><h1>復興區公所 2026 尾牙晚宴</h1></div>
+    <div class="nav-tabs">
+        <div class="tab-btn active" onclick="switchPage('manual', this)">數位手冊</div>
+        <div class="tab-btn" onclick="switchPage('board', this)">中獎看板</div>
+        <div class="tab-btn" onclick="checkAdmin(this)">管理後台</div>
+    </div>
+</nav>
+
+<div class="container">
+    <div id="pageManual" class="page active">
+        <div class="manual-nav no-print">
+            <button class="m-btn active" onclick="showManual('program', this)">節目流程</button>
+            <button class="m-btn" onclick="showManual('hr', this)">業務宣導</button>
+            <button class="m-btn" onclick="showManual('gift', this)">尾牙禮物清單</button>
+        </div>
+
+        <div id="m-program" class="manual-content active">
+            <div class="card program-card"><div class="time-box">18:00</div><div class="event-box"><b>賓客入席</b> | 迎賓樂曲</div></div>
+            <div class="card program-card"><div class="time-box">18:30</div><div class="event-box"><b>正式開場</b> | 區長致詞</div></div>
+            <div class="card program-card"><div class="time-box">19:30</div><div class="event-box"><b>第一階段抽獎</b> | 普獎、三獎</div></div>
+            <div class="card program-card"><div class="time-box">20:30</div><div class="event-box"><b>大獎時刻</b> | 一、二獎與特別獎</div></div>
+        </div>
+
+        <div id="m-hr" class="manual-content">
+            <div style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
+                <h3 style="color: var(--red);">⚖️ 廉政宣導/行政中立</h3><p>請同仁恪守機關倫理，謝絕不當饋贈，落實「清廉行政」。</p>
+                <h3 style="color: var(--red);">🛡️ 性騷擾防治</h3><p>營造友善職場，席間請保持適當社交距離與禮儀。</p>
+                <h3 style="color: var(--red);">🍷 安全駕駛</h3><p>「酒後不開車，開車不喝酒」，請同仁務必平安返家。</p>
+                <h3 style="color: var(--red);">🍷 員工協助方案宣導</h3><p>「請別忘記還有我們陪您渡過低谷，每一個人都是獨一獨二的存在」。</p>
+            </div>
+        </div>
+
+        <div id="m-gift" class="manual-content">
+            <h3 style="text-align: center; color: var(--primary);">🎁 2026 尾牙精選禮物清單</h3>
+            
+	　　<div style="width: 100%; height: 65vh; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.05); -webkit-overflow-scrolling: touch;">
+        　　　　<iframe 
+            　　　　src="https://fx10060425-droid.github.io/20260205FU-XING/" 
+            　　　　style="width: 100%; height: 100%; border: none;"
+                    scrolling="yes"
+                    loading="lazy"
+                    title="尾牙禮物清單"> 
+        　　　　</iframe>
+    　　　　</div>
+
+	　　<p style="text-align: center; font-size: 0.8rem; color: #999; margin-top: 10px;">
+        　　　　( 您可以直接在上方區域內滑動或縮放查看最新獎項 )
+    　　　　</p>	
+　　　　</div>
+    </div>
+
+
+    <div id="pageBoard" class="page">
+        <div style="text-align: center; margin-bottom: 30px;">
+            <input type="text" id="searchName" placeholder="輸入姓名查詢中獎狀態" style="max-width: 350px; display: inline-block;">
+            <button class="btn btn-blue" onclick="searchWinner()">查詢</button>
+            <div id="searchResult" style="margin-top: 15px; font-weight: bold; color: var(--accent);"></div>
+        </div>
+        <div id="boardContent" style="text-align: center; border-top: 1px solid var(--border); padding-top: 30px;">
+            <p style="color: #999;">抽獎尚未開始，好運醞釀中...</p>
+        </div>
+    </div>
+
+    <div id="pageAdmin" class="page">
+        <div class="admin-grid">
+            <div class="sidebar">
+                <h3>抽獎核心控制</h3>
+                <input type="file" id="excelInput">
+                <p style="font-size: 0.8rem;">待抽：<span id="remCount" style="color:var(--accent); font-weight:bold;">0</span> 人</p>
+                <input type="text" id="pName" placeholder="獎項名稱">
+                <input type="number" id="pCount" placeholder="抽出人數" value="10">
+                <button class="btn btn-outline" style="width:100%; margin-bottom: 20px;" onclick="addPrize()">+ 加入清單</button>
+                <div id="adminPrizeList" style="max-height: 180px; overflow-y: auto; border: 1px solid var(--border); margin-bottom: 20px; border-radius: 8px;"></div>
+                <button class="btn btn-blue" style="width:100%;" onclick="runDraw()">🎲 開始抽出勾選項</button>
+                <button class="btn btn-outline" style="width:100%; margin-top: 10px;" onclick="generateReport()">產製核對報表 (PDF)</button>
+            </div>
+            <div id="adminResults" style="background: white; border-radius: 15px; border: 1px solid var(--border); padding: 30px; text-align: center; min-height: 400px;">
+                <div id="drawStageContent">抽獎結果同步預覽</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal" class="modal" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content">
+        <button class="no-print" onclick="closeModal()" style="position: absolute; right: 20px; top: 20px; border: none; background: none; font-size: 1.5rem;">&times;</button>
+        <div id="modalBody"></div>
+    </div>
+</div>
+
+<script>
+    // --- 1. Firebase 設定 (請在此填入您的網址) ---
+    const firebaseConfig = { databaseURL: "https://fuxing-lucky-draw-default-rtdb.asia-southeast1.firebasedatabase.app/" };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database().ref('fuxing_2026_system_final');
+
+    let participants = [];
+    let prizeQueue = [];
+    let winnersHistory = [];
+
+    // --- 2. 導覽邏輯 ---
+    function switchPage(pageId, btn) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('page' + pageId.charAt(0).toUpperCase() + pageId.slice(1)).classList.add('active');
+        btn.classList.add('active');
+    }
+
+    function showManual(mId, btn) {
+        document.querySelectorAll('.manual-content').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.m-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('m-' + mId).classList.add('active');
+        btn.classList.add('active');
+    }
+
+    function checkAdmin(btn) {
+        const pw = prompt("管理授權碼：");
+        if(pw === "2026") switchPage('admin', btn);
+    }
+
+    // --- 3. 抽獎邏輯 (與先前版本一致) ---
+    document.getElementById('excelInput').addEventListener('change', (e) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
+            participants = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1}).map(r => r[0]).filter(n => n);
+            document.getElementById('remCount').innerText = participants.length;
+            alert("名單匯入成功！");
+        };
+        reader.readAsArrayBuffer(e.target.files[0]);
+    });
+
+    function addPrize() {
+        const name = document.getElementById('pName').value;
+        const count = parseInt(document.getElementById('pCount').value);
+        if(name && count > 0) {
+            prizeQueue.push({ name, count, id: Date.now() });
+            updateAdminUI();
+            document.getElementById('pName').value = "";
+        }
+    }
+
+    function updateAdminUI() {
+        document.getElementById('adminPrizeList').innerHTML = prizeQueue.map((p, i) => `
+            <div style="display:flex; padding:10px; border-bottom:1px solid #eee; align-items:center; font-size:0.9rem;">
+                <input type="checkbox" class="p-cb" value="${i}" checked style="width:auto; margin-right:10px;">
+                <span style="flex:1;">${p.name} (${p.count}名)</span>
+                <span onclick="prizeQueue.splice(${i},1);updateAdminUI()" style="cursor:pointer; color:#ccc;">&times;</span>
+            </div>
+        `).join('');
+    }
+
+    function runDraw() {
+        const checked = document.querySelectorAll('.p-cb:checked');
+        if(checked.length === 0 || participants.length === 0) return alert("請確認抽獎設定");
+
+        checked.forEach(cb => {
+            const prize = prizeQueue[cb.value];
+            let winners = [];
+            for(let i=0; i<prize.count; i++) {
+                if(participants.length > 0) {
+                    const idx = Math.floor(Math.random() * participants.length);
+                    winners.push(participants.splice(idx, 1)[0]);
+                }
+            }
+            db.push({ prize: prize.name, winners, time: new Date().toLocaleTimeString() });
+        });
+        const selIdx = Array.from(checked).map(c => parseInt(c.value)).sort((a,b)=>b-a);
+        selIdx.forEach(i => prizeQueue.splice(i, 1));
+        updateAdminUI();
+        document.getElementById('remCount').innerText = participants.length;
+    }
+
+    db.on('value', (snapshot) => {
+        const data = snapshot.val();
+        winnersHistory = [];
+        const board = document.getElementById('boardContent');
+        const adminStage = document.getElementById('drawStageContent');
+        if(!data) { board.innerHTML = "<p>等待開獎中...</p>"; return; }
+        let html = "";
+        Object.values(data).reverse().forEach(record => {
+            html += `<h3 style="color:var(--accent); border-bottom:1px solid #f0f0f0; padding-bottom:10px;">🎁 ${record.prize}</h3>`;
+            record.winners.forEach(w => {
+                html += `<div class="winner-card">${w}</div>`;
+                winnersHistory.push({ name: w, prize: record.prize });
+            });
+        });
+        board.innerHTML = html;
+        adminStage.innerHTML = html;
+    });
+
+    function searchWinner() {
+        const name = document.getElementById('searchName').value.trim();
+        const found = winnersHistory.filter(d => d.name === name);
+        document.getElementById('searchResult').innerText = name ? (found.length > 0 ? `恭喜！獲得：${found.map(f=>f.prize).join('、')}` : "加油，下一位中獎者就是您！") : "";
+    }
+
+    function showModal(content) { document.getElementById('modalBody').innerHTML = content; document.getElementById('modal').style.display = 'flex'; }
+    function closeModal() { document.getElementById('modal').style.display = 'none'; }
+
+    function generateReport() {
+        let html = `<div class="no-print" style="text-align:center;"><button class="btn btn-blue" onclick="window.print()">儲存為 PDF</button><hr></div>`;
+        html += `<h2 style="text-align:center;">復興區公所 2026 尾牙中獎核對表</h2>`;
+        const grouped = winnersHistory.reduce((acc, curr) => { (acc[curr.prize] = acc[curr.prize] || []).push(curr.name); return acc; }, {});
+        for (let prize in grouped) {
+            html += `<h3>獎項：${prize}</h3><table border="1" width="100%"><tr><th>序號</th><th>中獎人</th><th width="200">簽收欄</th></tr>`;
+            grouped[prize].forEach((n, i) => html += `<tr><td>${i+1}</td><td>${n}</td><td height="40"></td></tr>`);
+            html += `</table>`;
+        }
+        showModal(html);
+    }
+</script>
+</body>
+</html>
